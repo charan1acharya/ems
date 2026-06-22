@@ -1,0 +1,137 @@
+const { expect } = require('@playwright/test');
+const { EMPLOYEE_API_URL } = require('../utils/serviceChecks');
+
+class EmployeePage {
+  constructor(page) {
+    this.page = page;
+    this.formHeading = page.getByRole('heading', { name: /Add Employee|Edit Employee/ });
+    this.firstNameInput = page.getByPlaceholder('First Name');
+    this.lastNameInput = page.getByPlaceholder('Last Name');
+    this.emailInput = page.getByPlaceholder('Email');
+    this.addButton = page.getByRole('button', { name: 'Add' });
+    this.updateButton = page.getByRole('button', { name: 'Update' });
+    this.table = page.getByRole('table');
+    this.searchInput = page.getByRole('searchbox');
+  }
+
+  employeeRowByEmail(email) {
+    return this.page.getByRole('row').filter({ hasText: email });
+  }
+
+  employeeRowByName(name) {
+    return this.page.getByRole('row').filter({ hasText: name });
+  }
+
+  async createEmployee(employee) {
+    await this.firstNameInput.fill(employee.firstname);
+    await this.lastNameInput.fill(employee.lastname);
+    await this.emailInput.fill(employee.email);
+
+    const createResponsePromise = this.page.waitForResponse((response) =>
+      response.url() === `${EMPLOYEE_API_URL}/ems/AddEmployee` && response.request().method() === 'POST'
+    );
+
+    await this.addButton.click();
+    const createResponse = await createResponsePromise;
+    expect(createResponse.ok()).toBeTruthy();
+
+    await this.expectEmployeeExists(employee.email);
+  }
+
+  async updateEmployee(currentEmail, updatedEmployee) {
+    const row = this.employeeRowByEmail(currentEmail);
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: 'Edit' }).click();
+    await expect(this.updateButton).toBeVisible();
+    await this.firstNameInput.fill(updatedEmployee.firstname);
+    await this.lastNameInput.fill(updatedEmployee.lastname);
+    await this.emailInput.fill(updatedEmployee.email);
+
+    const updateResponsePromise = this.page.waitForResponse((response) =>
+      response.url().includes(`${EMPLOYEE_API_URL}/ems/UpdateEmployee/`) && response.request().method() === 'PUT'
+    );
+
+    await this.updateButton.click();
+    const updateResponse = await updateResponsePromise;
+    expect(updateResponse.ok()).toBeTruthy();
+
+    await this.expectEmployeeExists(updatedEmployee.email);
+  }
+
+  async deleteEmployee(email) {
+    const row = this.employeeRowByEmail(email);
+    await expect(row).toBeVisible();
+    this.page.once('dialog', async (dialog) => {
+      expect(dialog.message()).toContain('Are you sure you want to delete this employee?');
+      await dialog.accept();
+    });
+
+    const deleteResponsePromise = this.page.waitForResponse((response) =>
+      response.url().includes(`${EMPLOYEE_API_URL}/ems/DeleteEmployee/`) && response.request().method() === 'DELETE'
+    );
+
+    await row.getByRole('button', { name: 'Delete' }).click();
+    const deleteResponse = await deleteResponsePromise;
+    expect(deleteResponse.ok()).toBeTruthy();
+
+    await this.expectEmployeeRemoved(email);
+  }
+
+  async selectEmployee(email) {
+    const row = this.employeeRowByEmail(email);
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: 'Edit' }).click();
+    await expect(this.page.getByRole('heading', { name: 'Edit Employee' })).toBeVisible();
+  }
+
+  async expectEmployeeExists(email) {
+    await expect(this.employeeRowByEmail(email)).toBeVisible();
+  }
+
+  async expectEmployeeRemoved(email) {
+    await expect(this.employeeRowByEmail(email)).toHaveCount(0);
+  }
+
+  async expectRequiredValidation() {
+    await this.addButton.click();
+    const validationMessage = await this.firstNameInput.evaluate((element) => element.validationMessage);
+    expect(validationMessage).toMatch(/fill|required/i);
+  }
+
+  async expectInvalidEmailValidation() {
+    await this.firstNameInput.fill('Invalid');
+    await this.lastNameInput.fill('Email');
+    await this.emailInput.fill('invalid-email');
+    await this.addButton.click();
+    const validationMessage = await this.emailInput.evaluate((element) => element.validationMessage);
+    expect(validationMessage).toMatch(/email|include|@/i);
+  }
+
+  async search(term) {
+    await this.searchInput.fill(term);
+  }
+
+  async apiCreateEmployee(request, employee) {
+    const response = await request.post(`${EMPLOYEE_API_URL}/ems/AddEmployee`, {
+      data: employee
+    });
+    expect(response.ok()).toBeTruthy();
+    return response.json();
+  }
+
+  async apiDeleteEmployeeByEmail(request, email) {
+    const listResponse = await request.get(`${EMPLOYEE_API_URL}/ems/EmployeeDetail`);
+    if (!listResponse.ok()) {
+      return;
+    }
+
+    const employees = await listResponse.json();
+    const matches = employees.filter((employee) => employee.email === email);
+
+    for (const employee of matches) {
+      await request.delete(`${EMPLOYEE_API_URL}/ems/DeleteEmployee/${employee.id}`);
+    }
+  }
+}
+
+module.exports = { EmployeePage };

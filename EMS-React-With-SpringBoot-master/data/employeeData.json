@@ -1,0 +1,22 @@
+{
+  "baseEmployee": {
+    "firstname": "Auto",
+    "lastname": "Employee",
+    "emailDomain": "example.com"
+  },
+  "updatedEmployee": {
+    "firstname": "Updated",
+    "lastname": "Employee"
+  },
+  "invalidEmployee": {
+    "firstname": "",
+    "lastname": "",
+    "email": "invalid-email"
+  },
+  "search": {
+    "nonExistingEmployee": "No Such Employee 999999"
+  },
+  "fieldLength": {
+    "longName": "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  }
+}
