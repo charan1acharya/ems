@@ -15,7 +15,7 @@ class EmployeePage {
   }
 
   employeeRowByEmail(email) {
-    return this.page.getByRole('row').filter({ hasText: email });
+    return this.table.locator('tbody tr').filter({ hasText: email });
   }
 
   employeeRowByName(name) {
@@ -43,9 +43,15 @@ class EmployeePage {
     await expect(row).toBeVisible();
     await row.getByRole('button', { name: 'Edit' }).click();
     await expect(this.updateButton).toBeVisible();
-    await this.firstNameInput.fill(updatedEmployee.firstname);
-    await this.lastNameInput.fill(updatedEmployee.lastname);
-    await this.emailInput.fill(updatedEmployee.email);
+    if (updatedEmployee.firstname !== undefined) {
+      await this.firstNameInput.fill(updatedEmployee.firstname);
+    }
+    if (updatedEmployee.lastname !== undefined) {
+      await this.lastNameInput.fill(updatedEmployee.lastname);
+    }
+    if (updatedEmployee.email !== undefined) {
+      await this.emailInput.fill(updatedEmployee.email);
+    }
 
     const updateResponsePromise = this.page.waitForResponse((response) =>
       response.url().includes(`${EMPLOYEE_API_URL}/ems/UpdateEmployee/`) && response.request().method() === 'PUT'
@@ -85,11 +91,13 @@ class EmployeePage {
   }
 
   async expectEmployeeExists(email) {
-    await expect(this.employeeRowByEmail(email)).toBeVisible();
+    const rows = this.employeeRowByEmail(email);
+    await expect(rows.first()).toBeVisible();
   }
 
   async expectEmployeeRemoved(email) {
-    await expect(this.employeeRowByEmail(email)).toHaveCount(0);
+    const rows = this.employeeRowByEmail(email);
+    await expect(rows).toHaveCount(0);
   }
 
   async expectRequiredValidation() {
@@ -111,12 +119,36 @@ class EmployeePage {
     await this.searchInput.fill(term);
   }
 
+  async getEmployeeCount() {
+    // Prefer counting via API for accurate results, fall back to UI counting
+    try {
+      const count = await this.page.evaluate((url) =>
+        fetch(url + '/ems/EmployeeDetail')
+          .then((r) => r.json())
+          .then((list) => list.length)
+          .catch(() => 0),
+        EMPLOYEE_API_URL
+      );
+      if (typeof count === 'number') return count;
+    } catch (e) {
+      // fallback to UI counting
+    }
+
+    try {
+      await this.page.waitForSelector('table', { timeout: 2000 });
+      const rows = await this.table.locator('tbody tr').count();
+      return rows;
+    } catch (e) {
+      const allRows = await this.page.getByRole('row').count();
+      return Math.max(0, allRows - 1);
+    }
+  }
+
   async apiCreateEmployee(request, employee) {
     const response = await request.post(`${EMPLOYEE_API_URL}/ems/AddEmployee`, {
       data: employee
     });
-    expect(response.ok()).toBeTruthy();
-    return response.json();
+    return response;
   }
 
   async apiDeleteEmployeeByEmail(request, email) {

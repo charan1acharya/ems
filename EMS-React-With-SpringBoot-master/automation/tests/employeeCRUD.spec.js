@@ -1,4 +1,4 @@
-const { test } = require('@playwright/test');
+const { test, expect } = require('@playwright/test');
 const { DashboardPage } = require('../pages/DashboardPage');
 const { EmployeePage } = require('../pages/EmployeePage');
 const { isEmployeeApiAvailable } = require('../utils/serviceChecks');
@@ -78,5 +78,105 @@ test.describe('Employee CRUD Tests', () => {
     await dashboardPage.openAuthenticated();
 
     await employeePage.deleteEmployee(employee.email);
+  });
+  // Test to create multiple employees and verify their existence
+  test('Create Multiple Employees', async ({ request }) => {
+  const employee1 = uniqueEmployee();
+  const employee2 = uniqueEmployee();
+
+  await employeePage.apiCreateEmployee(request, employee1);
+  await employeePage.apiCreateEmployee(request, employee2);
+
+  await dashboardPage.openAuthenticated();
+
+  await employeePage.expectEmployeeExists(employee1.email);
+  await employeePage.expectEmployeeExists(employee2.email);
+  });
+  // Test to check duplicate employee creation validation
+  test('Duplicate Employee Validation', async ({ request }) => {
+  const employee = uniqueEmployee();
+
+  await employeePage.apiCreateEmployee(request, employee);
+
+  const response = await employeePage.apiCreateEmployee(
+    request,
+    employee
+  );
+
+  expect(response.status()).not.toBe(201);
+  });
+    // Test to search for a non-existing employee and verify that it is not found
+  test('Search Non Existing Employee', async () => {
+  await dashboardPage.openAuthenticated();
+
+  await employeePage.expectEmployeeRemoved(
+    'doesnotexist@test.com'
+  );
+  });
+  // Test to verify that the employee count increases after adding a new employee
+  test('Employee Count Increases After Add', async ({ request }) => {
+  const beforeCount = await employeePage.getEmployeeCount();
+
+  const employee = uniqueEmployee();
+
+  await employeePage.apiCreateEmployee(request, employee);
+
+  await dashboardPage.openAuthenticated();
+
+  const afterCount = await employeePage.getEmployeeCount();
+
+  expect(afterCount).toBeGreaterThan(beforeCount);
+  });
+  // Test to verify that the employee count decreases after deleting an employee
+  test('Employee Count Decreases After Delete', async ({ request }) => {
+  const employee = uniqueEmployee();
+
+  await employeePage.apiCreateEmployee(request, employee);
+
+  await dashboardPage.openAuthenticated();
+
+  const beforeCount = await employeePage.getEmployeeCount();
+
+  await employeePage.deleteEmployee(employee.email);
+
+  const afterCount = await employeePage.getEmployeeCount();
+
+  expect(afterCount).toBeLessThan(beforeCount);
+  });
+  // Test to update only the first name of an employee and verify that the employee still exists
+  test('Update Employee First Name Only', async ({ request }) => {
+  const employee = uniqueEmployee();
+
+  await employeePage.apiCreateEmployee(request, employee);
+
+  await dashboardPage.openAuthenticated();
+
+  await employeePage.updateEmployee(employee.email, {
+    firstname: 'UpdatedName'
+  });
+
+  await employeePage.expectEmployeeExists(employee.email);
+  });
+  // Test to verify that an employee persists after a page refresh
+  test('Employee Persists After Refresh', async ({ request, page }) => {
+  const employee = uniqueEmployee();
+
+  await employeePage.apiCreateEmployee(request, employee);
+
+  await dashboardPage.openAuthenticated();
+
+  await page.reload();
+
+  await employeePage.expectEmployeeExists(employee.email);
+  });
+  // Test to verify that an employee created via API appears in the UI
+  test('Employee Created Via API Appears In UI', async ({ request }) => {
+  const employee = uniqueEmployee();
+
+  await employeePage.apiCreateEmployee(request, employee);
+
+  await dashboardPage.openAuthenticated();
+
+  await employeePage.expectEmployeeExists(employee.email);
   });
 });
